@@ -4,7 +4,7 @@
 <br> 
 <br> Sebelum menggunakan auto_backup.php pastikan sudah mempunyai file check_rclone_mount.php untuk di eksekusi.
 <br> 
-<br> Disini saya menggunakan VPS ubuntu 22.04
+<br> Disini saya menggunakan VPS ubuntu 22.04 dan file auto_backup.php dan check_rclone_mount.php berada di dir /root
 <br> 
 <br> setelah kedua script siap, buka crontab untuk melakukan schedule task
 ```apache 
