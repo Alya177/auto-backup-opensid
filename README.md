@@ -10,4 +10,4 @@
 <br> 
 <br> 45 21 * * 2,5 php /root/auto_backup.php
 <br> 30 21 * * 2,5 php /root/check_rclone_mount.php
-<br> @reboot sleep 300 && nohup php /root/auto_reboot.php > /root/auto_reboot_nohup.log 2>&1 &
+<br> Disini diberikan jeda 15 menit setelah pengecekan rclone baru melakukan auto backup
