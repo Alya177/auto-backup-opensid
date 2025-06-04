@@ -6,6 +6,7 @@
 
 // --- Konfigurasi untuk Google Drive ---
 // Sesuaikan 'drive' jika nama remote Anda berbeda di `rclone config list`.
+// Disini saya menggunakan 2 remote rclone yaitu drive dan dropbox, hapus yang salah satu jika hanya mempunyai satu remote atau tambah jika memerlukan tambahan lain 
 $gdriveRemoteName = 'drive';
 $gdriveMountPoint = '/home/GDrive/'; // Pastikan direktori ini ada dan memiliki izin yang sesuai.
 
