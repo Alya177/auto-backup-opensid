@@ -1,3 +1,4 @@
+# auto-backup-opensid
 <br> Pastikan sudah mempunya folder yang termount dengan penyimpanan cloud seperti droopbox, googledrive dll.
 <br> 
 <br> Panduan install rclone bisa ikuti tutorial https://www.rumahweb.com/journal/cara-membuat-backup-ubuntu-ke-google-drive/
@@ -7,7 +8,12 @@
 <br> Disini saya menggunakan VPS ubuntu 22.04 dan file auto_backup.php dan check_rclone_mount.php berada di dir /root
 <br> 
 <br> setelah kedua script siap, buka crontab untuk melakukan schedule task
-```apache 
+
+```
+crontab -e
+```
+
+``` 
 30 21 * * 2,5 php /root/check_rclone_mount.php
 45 21 * * 2,5 php /root/auto_backup.php
 ``` 
