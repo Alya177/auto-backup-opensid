@@ -8,6 +8,9 @@
 <br> 
 <br> setelah kedua script siap, buka crontab untuk melakukan schedule task
 <br> 
-<br> 45 21 * * 2,5 php /root/auto_backup.php
 <br> 30 21 * * 2,5 php /root/check_rclone_mount.php
+<br> 45 21 * * 2,5 php /root/auto_backup.php
+<br> 
 <br> Disini diberikan jeda 15 menit setelah pengecekan rclone baru melakukan auto backup
+<br> 
+<br> File yang gagal terupload di cloud akan masih tersimpan di di directory temp
