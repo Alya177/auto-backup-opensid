@@ -4,13 +4,19 @@
 # URL repositori GitHub Anda
 REPO_URL="https://github.com/Alya177/auto-backup-opensid.git"
 
-# Direktori default jika tidak ada argumen yang diberikan.
-DEFAULT_INSTALL_PARENT_DIR="/root" 
-# Nama sub-direktori yang akan dibuat di dalam direktori induk
+# Direktori induk instalasi yang TETAP (tidak bisa diubah dari argumen)
+INSTALL_PARENT_DIR="/root" 
+# Nama sub-direktori aplikasi (otomatis diambil dari nama repo)
 APP_FOLDER_NAME="$(basename "$REPO_URL" .git)" 
+# Direktori instalasi aplikasi secara penuh
+INSTALL_DIR="$INSTALL_PARENT_DIR/$APP_FOLDER_NAME" # Akan menjadi /root/auto-backup-opensid/
 
 # Lokasi default rclone config (akan diisi ke PHP)
 RCLONE_CONFIG_PATH="/root/.config/rclone/rclone.conf" 
+
+# Log files
+CHECK_RCLONE_LOG_FILE="$INSTALL_DIR/check_rclone.log"
+AUTO_BACKUP_LOG_FILE="$INSTALL_DIR/auto_backup.log"
 
 # --- Fungsi untuk pesan log ---
 log_info() {
@@ -31,23 +37,9 @@ if [ "$EUID" -ne 0 ]; then
     log_error "Skrip ini harus dijalankan sebagai root atau dengan sudo. Contoh: sudo bash install.sh"
 fi
 
-# --- 2. Tentukan Direktori Instalasi ---
-if [ -n "$1" ]; then
-    INSTALL_PARENT_DIR="$1"
-    # Pastikan direktori induk yang diberikan ada
-    if [ ! -d "$INSTALL_PARENT_DIR" ]; then
-        log_error "Direktori induk yang ditentukan '$INSTALL_PARENT_DIR' tidak ditemukan. Harap berikan path direktori yang valid."
-    fi
-    log_info "Direktori induk yang ditentukan: $INSTALL_PARENT_DIR"
-else
-    INSTALL_PARENT_DIR="$DEFAULT_INSTALL_PARENT_DIR"
-    log_info "Tidak ada direktori induk yang ditentukan. Menggunakan direktori default: $INSTALL_PARENT_DIR"
-fi
-INSTALL_DIR="$INSTALL_PARENT_DIR/$APP_FOLDER_NAME"
-
-# Log file untuk check_rclone_mount.php (akan diisi ke PHP)
-# Dipilih untuk berada di dalam direktori instalasi untuk konsistensi.
-CHECK_RCLONE_LOG_FILE="$INSTALL_DIR/check_rclone.log" # Definisikan setelah INSTALL_DIR ditentukan
+# --- 2. Informasi Direktori Instalasi ---
+log_info "Aplikasi akan diinstal di: $INSTALL_DIR"
+log_info "Direktori backup sementara akan berada di: $INSTALL_PARENT_DIR/temp_db_backups/"
 
 # --- 3. Update Sistem dan Instal Dependensi Dasar ---
 log_info "Memperbarui daftar paket dan menginstal dependensi dasar..."
@@ -75,7 +67,8 @@ while [ "$DB_VALID" = false ]; do
 
     DB_USER="" 
     while [ -z "$DB_USER" ]; do
-        read -p "  Masukkan USER database: " DB_USER
+        read -p "  Masukkan USER database (saat ini default 'root'): " DB_USER_INPUT
+        DB_USER="${DB_USER_INPUT:-root}" # Gunakan 'root' jika input kosong
         if [ -z "$DB_USER" ]; then
             log_warning "  Nama USER database tidak boleh kosong. Harap masukkan kembali."
         fi
@@ -84,9 +77,10 @@ while [ "$DB_VALID" = false ]; do
     DB_PASS=""
     DB_PASS_RETRY=true
     while "$DB_PASS_RETRY"; do
-        read -s -p "  Masukkan PASSWORD database (tidak akan terlihat): " DB_PASS
+        read -s -p "  Masukkan PASSWORD database (saat ini default 'password_anda', tidak akan terlihat): " DB_PASS_INPUT
         echo 
-        if [ -z "$DB_PASS" ]; then
+        DB_PASS="${DB_PASS_INPUT:-password_anda}" # Gunakan 'password_anda' jika input kosong
+        if [ -z "$DB_PASS_INPUT" ]; then # Cek jika input kosong, bukan DB_PASS
             log_warning "  PASSWORD database kosong. Jika ini bukan yang Anda inginkan, harap masukkan password."
             read -p "  Tekan Enter untuk melanjutkan dengan password kosong, atau ketik 'r' untuk mencoba lagi: " TRY_AGAIN
             if [ "$TRY_AGAIN" != "r" ] && [ "$TRY_AGAIN" != "R" ]; then
@@ -99,7 +93,8 @@ while [ "$DB_VALID" = false ]; do
 
     DB_NAME="" 
     while [ -z "$DB_NAME" ]; do
-        read -p "  Masukkan NAMA database: " DB_NAME
+        read -p "  Masukkan NAMA database (saat ini default 'desa'): " DB_NAME_INPUT
+        DB_NAME="${DB_NAME_INPUT:-desa}" # Gunakan 'desa' jika input kosong
         if [ -z "$DB_NAME" ]; then
             log_warning "  NAMA database tidak boleh kosong. Harap masukkan kembali."
         fi
@@ -136,24 +131,42 @@ EOF
 done
 
 log_info "Mengupdate file auto_backup.php dengan kredensial database yang sudah terverifikasi..."
+# Mengganti nilai default dengan nilai yang diinput pengguna
 sed -i "s#\$dbHost = 'localhost';#\$dbHost = '$DB_HOST';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate dbHost di auto_backup.php."
-sed -i "s#\$dbUser = 'isi-user-database';#\$dbUser = '$DB_USER';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate dbUser di auto_backup.php."
-sed -i "s#\$dbPass = 'isi-password-database';#\$dbPass = '$DB_PASS';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate dbPass di auto_backup.php."
+sed -i "s#\$dbUser = 'root';#\$dbUser = '$DB_USER';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate dbUser di auto_backup.php."
+sed -i "s#\$dbPass = 'password_anda';#\$dbPass = '$DB_PASS';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate dbPass di auto_backup.php."
 sed -i "s#\$dbName = 'desa';#\$dbName = '$DB_NAME';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate dbName di auto_backup.php."
 
 log_info "Konfigurasi database di auto_backup.php selesai."
 # --- AKHIR BAGIAN KONFIGURASI DATABASE DENGAN VALIDASI KONEKSI ---
 
+# --- KONFIGURASI DIREKTORI BACKUP ---
+log_info "Mengatur direktori penyimpanan backup sementara..."
+# Direktori backup sementara akan selalu di /root/temp_db_backups/ (atau INSTALL_PARENT_DIR/temp_db_backups/)
+BACKUP_DIR="$INSTALL_PARENT_DIR/temp_db_backups/"
+
+# Pastikan ada trailing slash untuk konsistensi
+BACKUP_DIR=$(echo "$BACKUP_DIR" | sed 's/\/*$//')/
+
+log_info "Mengupdate file auto_backup.php dengan direktori backup: $BACKUP_DIR"
+# Mengganti nilai default __DIR__ . '/backups/' dengan path yang ditentukan
+sed -i "s#\$backupDir = __DIR__ . '/backups/';#\$backupDir = '$BACKUP_DIR';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate backupDir di auto_backup.php."
+log_info "Konfigurasi direktori backup di auto_backup.php selesai."
+
 
 # --- BAGIAN KONFIGURASI check_rclone_mount.php ---
 log_info "Mengkonfigurasi path di check_rclone_mount.php..."
 
-# RCLONE_BINARY_PLACEHOLDER sudah ditemukan otomatis oleh check_rclone_mount.php itu sendiri.
-# Hanya perlu update RCLONE_CONFIG_PATH_PLACEHOLDER dan SCRIPT_LOG_FILE_PLACEHOLDER.
-sed -i "s#RCLONE_CONFIG_PATH_PLACEHOLDER#$RCLONE_CONFIG_PATH#" "$INSTALL_DIR/check_rclone_mount.php" || log_error "Gagal mengupdate rcloneConfig di check_rclone_mount.php."
-sed -i "s#SCRIPT_LOG_FILE_PLACEHOLDER#$CHECK_RCLONE_LOG_FILE#" "$INSTALL_DIR/check_rclone_mount.php" || log_error "Gagal mengupdate scriptLogFile di check_rclone_mount.php."
+# Mengganti nilai default rcloneConfig
+sed -i "s#\$rcloneConfig = \"/root/.config/rclone/rclone.conf\";#\$rcloneConfig = \"$RCLONE_CONFIG_PATH\";#" "$INSTALL_DIR/check_rclone_mount.php" || log_error "Gagal mengupdate rcloneConfig di check_rclone_mount.php."
+# Mengganti nilai default scriptLogFile
+sed -i "s#\$scriptLogFile = \"/var/log/rclone_check_script_php.log\";#\$scriptLogFile = \"$CHECK_RCLONE_LOG_FILE\";#" "$INSTALL_DIR/check_rclone_mount.php" || log_error "Gagal mengupdate scriptLogFile di check_rclone_mount.php."
+# Mengganti nilai default logFile di auto_backup.php
+sed -i "s#\$logFile = '/var/log/auto_backup_opensid.log';#\$logFile = '$AUTO_BACKUP_LOG_FILE';#" "$INSTALL_DIR/auto_backup.php" || log_error "Gagal mengupdate logFile di auto_backup.php."
 
-log_info "Konfigurasi path di check_rclone_mount.php selesai."
+
+log_info "Konfigurasi path di check_rclone_mount.php dan auto_backup.php selesai."
+
 
 # --- BAGIAN BARU: KONFIGURASI REMOTE Rclone OTOMATIS ---
 log_info "Memulai konfigurasi remote Rclone untuk check_rclone_mount.php."
@@ -226,9 +239,10 @@ fi
 
 log_info "Mengupdate file check_rclone_mount.php dengan konfigurasi remote..."
 
-# Menggunakan sed untuk mengganti baris placeholder dengan konten array yang digenerate
-# Perhatikan bahwa ini mengganti seluruh baris komentar dan inisialisasi array default
-sed -i "/\/\/ REMOTES_TO_MONITOR_ARRAY_CONTENT_PLACEHOLDER/c\\\$remotesToMonitor = [\n${REMOTE_CONFIG_PHP_SNIPPET}\n];" "$INSTALL_DIR/check_rclone_mount.php" || log_error "Gagal mengupdate \$remotesToMonitor di check_rclone_mount.php."
+# Menggunakan sed untuk mengganti seluruh definisi array $remotesToMonitor
+# Mencari baris yang dimulai dengan '$remotesToMonitor = [' sampai baris '];'
+# Ini akan mengganti seluruh blok konfigurasi remote, termasuk defaultnya.
+sed -i "/^\s*\$remotesToMonitor = \[/,/^\];\s*\/\/\s*Akhir Definisi Remote Mount ---/c\\\$remotesToMonitor = [\n${REMOTE_CONFIG_PHP_SNIPPET}\n];" "$INSTALL_DIR/check_rclone_mount.php" || log_error "Gagal mengupdate \$remotesToMonitor di check_rclone_mount.php."
 
 log_info "Konfigurasi remote Rclone selesai."
 # --- AKHIR BAGIAN KONFIGURASI REMOTE Rclone OTOMATIS ---
