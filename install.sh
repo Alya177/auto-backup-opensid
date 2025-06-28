@@ -39,7 +39,7 @@ fi
 
 # --- 2. Informasi Direktori Instalasi ---
 log_info "Aplikasi akan diinstal di: $INSTALL_DIR"
-log_info "Direktori backup sementara akan berada di: $INSTALL_PARENT_DIR/temp_db_backups/"
+log_info "Direktori backup sementara akan berada di: $INSTALL_DIR/temp_db_backups/" # UBAH DI SINI
 
 # --- 3. Update Sistem dan Instal Dependensi Dasar ---
 log_info "Memperbarui daftar paket dan menginstal dependensi dasar..."
@@ -142,8 +142,8 @@ log_info "Konfigurasi database di auto_backup.php selesai."
 
 # --- KONFIGURASI DIREKTORI BACKUP ---
 log_info "Mengatur direktori penyimpanan backup sementara..."
-# Direktori backup sementara akan selalu di /root/temp_db_backups/ (atau INSTALL_PARENT_DIR/temp_db_backups/)
-BACKUP_DIR="$INSTALL_PARENT_DIR/temp_db_backups/"
+# Direktori backup sementara akan selalu di dalam INSTALL_DIR (yaitu /root/auto-backup-opensid/temp_db_backups/)
+BACKUP_DIR="$INSTALL_DIR/temp_db_backups/" # BARIS INI TELAH DIUBAH
 
 # Pastikan ada trailing slash untuk konsistensi
 BACKUP_DIR=$(echo "$BACKUP_DIR" | sed 's/\/*$//')/
