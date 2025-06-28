@@ -4,18 +4,7 @@
 // --- Konfigurasi Penting: HARAP SESUAIKAN DENGAN SETUP ANDA! ---
 // ====================================================================
 
-// --- Konfigurasi untuk Google Drive ---
-// Sesuaikan 'drive' jika nama remote Anda berbeda di `rclone config list`.
-// Disini menggunakan 2 remote rclone yaitu drive dan dropbox, hapus yang salah satu jika hanya mempunyai satu remote atau tambah jika memerlukan tambahan lain 
-$gdriveRemoteName = 'drive';
-$gdriveMountPoint = '/home/GDrive/'; // Pastikan direktori ini ada dan memiliki izin yang sesuai.
-
-// --- Konfigurasi untuk Dropbox ---
-// Sesuaikan 'dropbox' jika nama remote Anda berbeda di `rclone config list`.
-$dropboxRemoteName = 'dropbox';
-$dropboxMountPoint = '/home/dropbox/'; // Pastikan direktori ini ada dan memiliki izin yang sesuai.
-
-// --- Path Sistem dan Log Umum ---
+// --- Konfigurasi Umum ---
 // Path lengkap ke binary rclone di sistem Ubuntu Anda.
 // Anda bisa menemukannya dengan menjalankan `which rclone` di terminal.
 $rcloneBinary = "/usr/bin/rclone";
@@ -29,13 +18,30 @@ $rcloneBinary = "/usr/bin/rclone";
 // dan pastikan user 'root' punya izin baca.
 $rcloneConfig = "/root/.config/rclone/rclone.conf";
 
-// Log file untuk aktivitas rclone mount itu sendiri.
-// Semua output (termasuk error) dari perintah `rclone mount` akan masuk ke sini.
-$rcloneLogFile = "/var/log/rclone.log";
-
 // Log file untuk aktivitas script PHP ini.
 // Mencatat kapan script dijalankan, status pemeriksaan, dan upaya remount.
 $scriptLogFile = "/var/log/rclone_check_script_php.log";
+
+// --- Konfigurasi Pembatasan Ukuran Log Script PHP ---
+const MAX_LOG_LINES = 3000;
+const LINES_TO_TRIM = 1000;
+const TRIM_THRESHOLD = 2000;
+
+// --- Definisi Remote Mount (bisa tambah lebih banyak di sini) ---
+$remotesToMonitor = [
+    [
+        'remote_name' => 'drive',
+        'mount_point' => '/home/GDrive/',
+        'rclone_log'  => '/var/log/rclone_gdrive.log', // Log khusus untuk rclone Google Drive
+        'vfs_cache_size' => '100G', // Ukuran cache VFS khusus untuk remote ini
+    ],
+    [
+        'remote_name' => 'dropbox',
+        'mount_point' => '/home/dropbox/',
+        'rclone_log'  => '/var/log/rclone_dropbox.log', // Log khusus untuk rclone Dropbox
+        'vfs_cache_size' => '50G', // Ukuran cache VFS khusus untuk remote ini (contoh)
+    ],
+];
 
 // ====================================================================
 // --- Akhir Konfigurasi --- (Jangan mengubah kode di bawah ini)
@@ -43,74 +49,139 @@ $scriptLogFile = "/var/log/rclone_check_script_php.log";
 
 
 // --- Fungsi Pembantu untuk Logging ---
-/**
- * Menulis pesan ke file log dengan timestamp.
- */
 function logMessage(string $message, string $logFile): void {
     $timestamp = date("Y-m-d H:i:s");
-    file_put_contents($logFile, "$timestamp: $message\n", FILE_APPEND | LOCK_EX);
+    $logEntry = "$timestamp: $message\n";
+
+    $logDir = dirname($logFile);
+    if (!is_dir($logDir)) {
+        if (!mkdir($logDir, 0755, true)) {
+            error_log("ERROR: Gagal membuat direktori log '$logDir'. Pesan: $message");
+            return;
+        }
+    }
+
+    $currentContent = '';
+    if (file_exists($logFile)) {
+        $currentContent = file_get_contents($logFile);
+        if ($currentContent === false) {
+            error_log("ERROR: Gagal membaca log file '$logFile'. Pesan: $message");
+            file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
+            return;
+        }
+    }
+
+    $lines = explode("\n", $currentContent);
+    $lines = array_filter($lines);
+    $currentLineCount = count($lines);
+
+    if ($currentLineCount >= TRIM_THRESHOLD) {
+        $newLines = array_slice($lines, LINES_TO_TRIM);
+        file_put_contents($logFile, implode("\n", $newLines) . "\n", LOCK_EX);
+        file_put_contents($logFile, date("Y-m-d H:i:s") . ": LOG ROTATION: Trimmed " . LINES_TO_TRIM . " lines. Current lines: " . count($newLines) . "\n", FILE_APPEND | LOCK_EX);
+    }
+
+    file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
 }
 
+
 // --- Fungsi Inti: Memeriksa dan Me-mount Ulang Satu Remote ---
-/**
- * Memeriksa status mount rclone dan mencoba me-mount ulang jika tidak aktif.
- */
-function checkAndMountRclone(
-    string $remoteName,
-    string $mountPoint,
-    string $rcloneBinary,
-    string $rcloneConfig,
-    string $rcloneLogFile,
-    string $scriptLogFile
-): void {
-    // Pastikan mountPoint tidak berakhir dengan slash untuk konsistensi logging.
-    $mountPoint = rtrim($mountPoint, '/');
+function checkAndMountRclone(array $remoteConfig, string $rcloneBinary, string $rcloneConfig, string $scriptLogFile): void {
+    $remoteName = $remoteConfig['remote_name'];
+    $mountPoint = rtrim($remoteConfig['mount_point'], '/');
+    $rcloneLogFile = $remoteConfig['rclone_log'];
+    $vfsCacheSize = $remoteConfig['vfs_cache_size'];
 
     logMessage("Memeriksa mount untuk: Remote '$remoteName' di '$mountPoint'", $scriptLogFile);
 
-    // Perintah `mountpoint -q` akan mengembalikan exit code 0 jika mount point aktif.
-    exec("mountpoint -q " . escapeshellarg($mountPoint) . " 2>&1", $output, $returnVar);
+    // --- Pengecekan Izin Direktori Mount ---
+    if (!is_dir($mountPoint)) {
+        logMessage("Direktori mount '$mountPoint' tidak ada, mencoba membuatnya.", $scriptLogFile);
+        if (!mkdir($mountPoint, 0755, true)) {
+            logMessage("Gagal membuat direktori mount '$mountPoint'. Periksa izin folder induk dan hak akses script.", $scriptLogFile);
+            return;
+        } else {
+            logMessage("Direktori mount '$mountPoint' berhasil dibuat.", $scriptLogFile);
+        }
+    } elseif (!is_writable($mountPoint)) {
+        logMessage("Peringatan: Direktori mount '$mountPoint' tidak memiliki izin tulis. Ini mungkin menyebabkan masalah mount.", $scriptLogFile);
+    }
 
-    if ($returnVar === 0) {
-        logMessage("Rclone mount untuk '$remoteName' di '$mountPoint' masih aktif.", $scriptLogFile);
-    } else {
-        logMessage("Rclone mount untuk '$remoteName' di '$mountPoint' tidak aktif. Mencoba me-mount ulang...", $scriptLogFile);
+    // --- PERIKSA DULU: Apakah mount point sudah aktif dan berfungsi? ---
+    exec("mountpoint -q " . escapeshellarg($mountPoint) . " 2>&1", $mountpointCheckOutput, $mountpointCheckReturnVar);
 
-        // Pastikan direktori mount ada. Jika tidak, coba buat.
-        if (!is_dir($mountPoint)) {
-            logMessage("Direktori mount '$mountPoint' tidak ada, mencoba membuatnya.", $scriptLogFile);
-            if (!mkdir($mountPoint, 0755, true)) {
-                logMessage("Gagal membuat direktori mount '$mountPoint'. Periksa izin folder induk dan hak akses script.", $scriptLogFile);
-                return; // Keluar dari fungsi ini jika direktori tidak dapat dibuat.
+    if ($mountpointCheckReturnVar === 0) {
+        // Mount point sudah aktif. Tidak perlu intervensi.
+        logMessage("Rclone mount untuk '$remoteName' di '$mountPoint' sudah aktif (dikonfirmasi oleh mountpoint). Tidak perlu intervensi.", $scriptLogFile);
+        return; // Keluar dari fungsi gracefully
+    }
+
+    // Jika sampai di sini, mount point TIDAK aktif/berfungsi.
+    logMessage("Rclone mount untuk '$remoteName' di '$mountPoint' tidak aktif. Memulai prosedur pembersihan dan remount...", $scriptLogFile);
+
+    // --- Cari dan bunuh proses rclone yang mungkin macet (jika ada) ---
+    $pgrepCommand = "pgrep -f " . escapeshellarg($rcloneBinary . " mount " . $remoteName . ":");
+    exec($pgrepCommand, $pids, $pgrepReturnVar);
+
+    if ($pgrepReturnVar === 0 && !empty($pids)) {
+        logMessage("Ditemukan proses rclone mount untuk '$remoteName' (PID: " . implode(', ', $pids) . "). Mencoba menghentikannya.", $scriptLogFile);
+        foreach ($pids as $pid) {
+            exec("sudo kill $pid", $killOutput, $killReturnVar);
+            if ($killReturnVar === 0) {
+                logMessage("PID $pid berhasil dihentikan.", $scriptLogFile);
+            } else {
+                logMessage("Gagal menghentikan PID $pid. Exit code: $killReturnVar. Pesan: " . implode(" ", $killOutput), $scriptLogFile);
             }
         }
+        sleep(2); // Beri waktu sebentar untuk proses dihentikan
+    } else {
+        logMessage("Tidak ditemukan proses rclone mount yang berjalan untuk '$remoteName'.", $scriptLogFile);
+    }
 
-        // Bangun perintah rclone mount lengkap dengan semua opsi yang direkomendasikan.
-        $command = $rcloneBinary . " mount " . escapeshellarg($remoteName . ":") . " " . escapeshellarg($mountPoint);
-        $command .= " --config=" . escapeshellarg($rcloneConfig);
-        $command .= " --allow-other";
-        $command .= " --vfs-cache-mode writes";
-        $command .= " --vfs-cache-max-age 24h";
-        $command .= " --vfs-cache-max-size 100G";
-        $command .= " --dir-cache-time 72h";
-        $command .= " --poll-interval 1m";
-        $command .= " --log-file " . escapeshellarg($rcloneLogFile);
-        $command .= " --log-level INFO";
-        $command .= " --timeout 1h";
-        $command .= " --retries 3";
-
-        // Jalankan perintah mount di latar belakang menggunakan sudo.
-        $fullCommand = "sudo " . $command . " &>> " . escapeshellarg($scriptLogFile) . " &";
-        
-        logMessage("Menjalankan perintah mount untuk '$remoteName': $fullCommand", $scriptLogFile);
-        
-        exec($fullCommand, $output, $returnVar);
-
-        if ($returnVar === 0) {
-            logMessage("Percobaan mount ulang untuk '$remoteName' selesai (perintah dieksekusi). Periksa log rclone ($rcloneLogFile) untuk detail keberhasilan mount.", $scriptLogFile);
+    // --- Coba unmount mount point jika masih aktif setelah membunuh proses (misal: macet) ---
+    // Pemeriksaan ini penting jika `mountpoint -q` awal salah atau mount stuck.
+    exec("mountpoint -q " . escapeshellarg($mountPoint) . " 2>&1", $umountCheckOutput, $umountCheckReturnVar);
+    if ($umountCheckReturnVar === 0) {
+        logMessage("Mount point '$mountPoint' masih aktif (setelah pembersihan proses), mencoba meng-unmount ulang.", $scriptLogFile);
+        exec("sudo umount " . escapeshellarg($mountPoint) . " 2>&1", $umountOutput, $umountReturnVar);
+        if ($umountReturnVar === 0) {
+            logMessage("Mount point '$mountPoint' berhasil di-unmount.", $scriptLogFile);
         } else {
-            logMessage("Percobaan mount ulang untuk '$remoteName' GAGAL (perintah tidak dieksekusi atau ada masalah awal). Exit code: $returnVar. Periksa log script ini dan log rclone untuk detail lebih lanjut.", $scriptLogFile);
+            logMessage("Gagal meng-unmount '$mountPoint'. Output: " . implode("\n", $umountOutput) . " Exit code: $umountReturnVar. Mount mungkin sibuk.", $scriptLogFile);
+            // Jika umount gagal di sini, berarti ada masalah serius dan kita tidak bisa mount ulang.
+            return;
         }
+        sleep(2); // Beri waktu sebentar setelah unmount
+    }
+
+
+    logMessage("Mencoba me-mount ulang '$remoteName' di '$mountPoint'...", $scriptLogFile);
+
+    // --- Bangun perintah rclone mount lengkap ---
+    $command = $rcloneBinary . " mount " . escapeshellarg($remoteName . ":") . " " . escapeshellarg($mountPoint);
+    $command .= " --config=" . escapeshellarg($rcloneConfig);
+    $command .= " --allow-other";
+    $command .= " --vfs-cache-mode writes";
+    $command .= " --vfs-cache-max-age 24h";
+    $command .= " --vfs-cache-max-size " . escapeshellarg($vfsCacheSize);
+    $command .= " --dir-cache-time 72h";
+    $command .= " --poll-interval 1m";
+    $command .= " --log-file " . escapeshellarg($rcloneLogFile);
+    $command .= " --log-level INFO"; // Tetap INFO untuk log rclone utama, bisa DEBUG saat debug
+    $command .= " --timeout 1h";
+    $command .= " --retries 3";
+    $command .= " --daemon";
+
+    $fullCommand = "nohup " . $command . " > /dev/null 2>&1 &";
+
+    logMessage("Menjalankan perintah mount untuk '$remoteName': $fullCommand", $scriptLogFile);
+
+    exec($fullCommand, $output, $returnVar);
+
+    if ($returnVar === 0) {
+        logMessage("Perintah mount rclone untuk '$remoteName' berhasil dieksekusi di latar belakang. Periksa log rclone ($rcloneLogFile) dan status mount ($mountPoint) setelah beberapa saat untuk konfirmasi.", $scriptLogFile);
+    } else {
+        logMessage("Gagal mengeksekusi perintah mount rclone untuk '$remoteName'. Exit code: $returnVar. Ini menunjukkan masalah dengan perintah `nohup` itu sendiri atau path binary.", $scriptLogFile);
     }
 }
 
@@ -118,28 +189,17 @@ function checkAndMountRclone(
 // --- Logika Utama Script: Memanggil Fungsi untuk Setiap Mount ---
 // ====================================================================
 
-logMessage("Memulai pemeriksaan rclone mount untuk Google Drive dan Dropbox.", $scriptLogFile);
+logMessage("Memulai pemeriksaan rclone mount untuk semua remote yang dikonfigurasi.", $scriptLogFile);
 
-// Periksa dan mount ulang Google Drive
-checkAndMountRclone(
-    $gdriveRemoteName,
-    $gdriveMountPoint,
-    $rcloneBinary,
-    $rcloneConfig,
-    $rcloneLogFile,
-    $scriptLogFile
-);
+foreach ($remotesToMonitor as $remote) {
+    checkAndMountRclone(
+        $remote,
+        $rcloneBinary,
+        $rcloneConfig,
+        $scriptLogFile
+    );
+}
 
-// Periksa dan mount ulang Dropbox
-checkAndMountRclone(
-    $dropboxRemoteName,
-    $dropboxMountPoint,
-    $rcloneBinary,
-    $rcloneConfig,
-    $rcloneLogFile,
-    $scriptLogFile
-);
-
-logMessage("Pemeriksaan rclone mount untuk Google Drive dan Dropbox selesai.", $scriptLogFile);
+logMessage("Pemeriksaan rclone mount untuk semua remote yang dikonfigurasi selesai.", $scriptLogFile);
 
 ?>
