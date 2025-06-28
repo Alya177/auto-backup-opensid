@@ -14,9 +14,8 @@ Ikuti langkah-langkah mudah berikut untuk menginstal Auto Backup OpenSID di serv
 1.  **Unduh skrip installer:**
     Pastikan Anda login sebagai `root` atau menggunakan `sudo`.
     ```bash
-    wget [https://raw.githubusercontent.com/NAMA_USERNAME_GITHUB_ANDA/auto-backup-opensid/main/install.sh](https://raw.githubusercontent.com/NAMA_USERNAME_GITHUB_ANDA/auto-backup-opensid/main/install.sh)
+    wget [https://raw.githubusercontent.com/Alya177/auto-backup-opensid/main/install.sh](https://raw.githubusercontent.com/Alya177/auto-backup-opensid/main/install.sh)
     ```
-    *(Ganti `NAMA_USERNAME_GITHUB_ANDA` dengan username GitHub Anda dan `main` jika branch Anda berbeda.)*
 
 2.  **Berikan izin eksekusi pada skrip:**
     ```bash
