@@ -3,10 +3,10 @@
 // ====================================================================
 // --- Konfigurasi Database (HARAP SESUAIKAN!) ---
 // ====================================================================
-$dbHost = 'localhost';          // Host database Anda
-$dbUser = 'xxxxxx';              // Username database Anda
-$dbPass = 'xxxxxxxxxxx';          // Password database Anda
-$dbName = 'desa';             // Nama database yang ingin di-backup
+$dbHost = 'localhost';
+$dbUser = 'isi-user-database';
+$dbPass = 'isi-password-database';
+$dbName = 'desa';
 
 // ====================================================================
 // --- Konfigurasi Lokasi File Backup & Script Rclone (HARAP SESUAIKAN!) ---
