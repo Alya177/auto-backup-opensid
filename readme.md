@@ -59,22 +59,18 @@ Skrip ini akan secara otomatis:
 
 3.  **Uji Coba Manual:** Untuk menguji skrip backup secara manual (setelah Rclone dikonfigurasi), Anda dapat menjalankan:
     ```bash
-    php [DIREKTORI_INSTALASI_ANDA]/check_rclone_mount.php
-    php [DIREKTORI_INSTALASI_ANDA]/auto_backup.php
+    php root/auto-backup-opensid/check_rclone_mount.php
+    php root/auto-backup-opensid/auto_backup.php
     ```
-    *(Ganti `[DIREKTORI_INSTALASI_ANDA]` dengan path sebenarnya seperti `/root/auto-backup-opensid` atau path kustom Anda.)*
+    *(Ganti `[root]` dengan path sebenarnya seperti `/root/auto-backup-opensid` atau path kustom Anda.)*
 
 ---
-# Cara Manual
-<br> Pastikan sudah mempunya folder yang termount dengan penyimpanan cloud seperti droopbox, googledrive dll.
-<br> 
-<br> Panduan install rclone bisa ikuti tutorial https://www.rumahweb.com/journal/cara-membuat-backup-ubuntu-ke-google-drive/
-<br> 
-<br> Sebelum menggunakan auto_backup.php pastikan sudah mempunyai file check_rclone_mount.php untuk di eksekusi.
-<br> 
-<br> Disini saya menggunakan VPS ubuntu 22.04 dan file auto_backup.php dan check_rclone_mount.php berada di dir /root
-<br> 
-<br> setelah kedua script siap, buka crontab untuk melakukan schedule task
+# Cara Manual dir manual "/root"
+Pastikan sudah mempunya folder yang termount dengan penyimpanan cloud seperti droopbox, googledrive dll.
+Panduan install rclone bisa ikuti tutorial https://www.rumahweb.com/journal/cara-membuat-backup-ubuntu-ke-google-drive/
+Sebelum menggunakan auto_backup.php pastikan sudah mempunyai file check_rclone_mount.php untuk di eksekusi. 
+Disini saya menggunakan VPS ubuntu 22.04 dan file auto_backup.php dan check_rclone_mount.php berada di dir /root
+Setelah kedua script siap, buka crontab untuk melakukan schedule task
 
 ```
 crontab -e
