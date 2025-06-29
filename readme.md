@@ -66,11 +66,11 @@ Skrip ini akan secara otomatis:
 
 ---
 # Cara Manual dir manual "/root"
-Pastikan sudah mempunya folder yang termount dengan penyimpanan cloud seperti droopbox, googledrive dll.
-Panduan install rclone bisa ikuti tutorial https://www.rumahweb.com/journal/cara-membuat-backup-ubuntu-ke-google-drive/
-Sebelum menggunakan auto_backup.php pastikan sudah mempunyai file check_rclone_mount.php untuk di eksekusi. 
-Disini saya menggunakan VPS ubuntu 22.04 dan file auto_backup.php dan check_rclone_mount.php berada di dir /root
-Setelah kedua script siap, buka crontab untuk melakukan schedule task
+- Pastikan sudah mempunya folder yang termount dengan penyimpanan cloud seperti droopbox, googledrive dll.
+- Panduan install rclone bisa ikuti tutorial https://www.rumahweb.com/journal/cara-membuat-backup-ubuntu-ke-google-drive/
+- Sebelum menggunakan auto_backup.php pastikan sudah mempunyai file check_rclone_mount.php untuk di eksekusi. 
+- Disini saya menggunakan VPS ubuntu 22.04 dan file auto_backup.php dan check_rclone_mount.php berada di dir /root
+- Setelah kedua script siap, buka crontab untuk melakukan schedule task
 
 ```
 crontab -e
